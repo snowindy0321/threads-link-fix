@@ -1,16 +1,22 @@
-name: Build & Release Morphe Patch
+name: Release Morphe Patches
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.1)'
+        required: false
+        default: '1.0.1'
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -25,45 +31,83 @@ jobs:
           java-version: '21'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Patch Package (.mpp)
+      - name: Build Patches (.mpp) with Morphe Plugin
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew build || gradle build || true
+          chmod +x ./gradlew
+          ./gradlew :patches:buildAndroid :patches:generatePatchesList --no-daemon
+
+      - name: Prepare Release Assets
+        id: prepare
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
           else
-            gradle build || true
+            VERSION=$(jq -r '.version' patches-bundle.json)
           fi
-
-      - name: Package MPP bundle
-        run: |
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Find compiled MPP bundle
+          MPP_FILE=$(find patches/build/libs -name "*.mpp" ! -name "*sources*" ! -name "*javadoc*" | head -n 1)
+          if [ -z "$MPP_FILE" ]; then
+            echo "Error: MPP file not found in patches/build/libs!"
+            ls -la patches/build/libs || true
+            exit 1
+          fi
+          
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
-            VERSION="1.0.0"
-          fi
+          cp "$MPP_FILE" "dist/patches-${VERSION}.mpp"
           
-          # If gradle generated an mpp, use it; otherwise package mpp bundle from classes/json
-          MPP_FILE=$(find . -name "*.mpp" | head -n 1)
-          if [ -n "$MPP_FILE" ]; then
-            cp "$MPP_FILE" "dist/patches-${VERSION}.mpp"
-          else
-            echo "Creating patch bundle archive..."
-            zip -r "dist/patches-${VERSION}.mpp" patches-list.json src/
-          fi
+          # Format UTC date strictly as YYYY-MM-DDTHH:MM:SS (No 'Z' suffix, required by Morphe Manager)
+          CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%S")
           
-          # Update download_url and version in patches-bundle.json
-          sed -i "s/patches-[0-9.]*\.mpp/patches-${VERSION}.mpp/g" patches-bundle.json
-          sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"${VERSION}\"/g" patches-bundle.json
+          # Update patches-bundle.json
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/patches-${VERSION}.mpp"
+          jq --arg created "$CREATED_AT" \
+             --arg ver "$VERSION" \
+             --arg url "$DOWNLOAD_URL" \
+             '.created_at = $created | .version = $ver | .download_url = $url' \
+             patches-bundle.json > patches-bundle.json.tmp
+          mv patches-bundle.json.tmp patches-bundle.json
+          
           cp patches-bundle.json dist/
           cp patches-list.json dist/
 
-      - name: Publish GitHub Release
+      - name: Commit Updated Metadata to Repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add patches-bundle.json patches-list.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update patches metadata for v${VERSION} [skip ci]" && git push origin HEAD:main)
+
+      - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: "v${{ env.VERSION }}"
+          name: "Threads Link Fix v${{ env.VERSION }}"
+          body: |
+            ## Threads Link Fix v${{ env.VERSION }}
+
+            專為 Meta Threads (`com.instagram.barcelona`) 設計的 Morphe 修補套件。
+
+            ### 修復內容：
+            * 修復點擊 IG 個人檔案連結失敗問題
+            * 修復分享貼文至 IG 限時動態失敗問題
+            * 完整相容 Morphe Manager 標準中繼資料與 classes.dex 格式
+
+            ### 一鍵新增至 Morphe Manager：
+            點擊 [新增至 Morphe Manager](https://morphe.software/add-source?github=${{ github.repository }})
           files: |
-            dist/*
-            patches-bundle.json
-            patches-list.json
-          generate_release_notes: true
+            dist/patches-${{ env.VERSION }}.mpp
+            dist/patches-bundle.json
+            dist/patches-list.json
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-09T07:35:00Z",
-  "description": "## [1.0.0] - 2026-11-09\n\n### 🚀 Features\n\n- **Threads Link Fix**: 解決安裝 Morphe Instagram 時，Threads 無法開啟 IG 個人檔案與無法分享貼文至限時動態的問題。\n- 繞過 Meta FamilyIntentScope 憑證白名單與簽名匹配校驗。\n",
-  "download_url": "https://github.com/snowindy0321/threads-link-fix/releases/download/v1.0.0/patches-1.0.0.mpp",
+  "created_at": "2026-11-09T16:15:00",
+  "description": "## [1.0.1](https://github.com/snowindy0321/threads-link-fix/releases/tag/v1.0.1) (2026-11-09)\n\n### Fixes\n* Resolve Morphe Manager metadata parsing error (ISO-8601 local datetime formatting)\n* Build compliant .mpp bundle with classes.dex via Morphe Gradle plugin",
+  "download_url": "https://github.com/snowindy0321/threads-link-fix/releases/download/v1.0.1/patches-1.0.1.mpp",
   "signature_download_url": "",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
