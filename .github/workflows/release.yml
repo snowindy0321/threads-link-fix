@@ -32,14 +32,16 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
 
       - name: Build Patches (.mpp) with Morphe Plugin
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          chmod +x ./gradlew
-          ./gradlew :patches:buildAndroid :patches:generatePatchesList --no-daemon
+          chmod +x ./gradlew || true
+          gradle :patches:buildAndroid :patches:generatePatchesList --no-daemon || ./gradlew :patches:buildAndroid :patches:generatePatchesList --no-daemon
 
       - name: Prepare Release Assets
         id: prepare
