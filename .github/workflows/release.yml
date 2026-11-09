@@ -35,16 +35,8 @@ jobs:
         with:
           gradle-version: '9.8.2'
 
-      - name: Build Patches (.mpp) with Morphe Plugin
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          chmod +x ./gradlew || true
-          gradle :patches:buildAndroid :patches:generatePatchesList --no-daemon || ./gradlew :patches:buildAndroid :patches:generatePatchesList --no-daemon
-
-      - name: Prepare Release Assets
-        id: prepare
+      - name: Resolve Version
+        id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -54,6 +46,21 @@ jobs:
             VERSION=$(jq -r '.version' patches-bundle.json)
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Building version: $VERSION"
+
+      - name: Build Patches (.mpp) with Morphe Plugin
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x ./gradlew || true
+          gradle :patches:buildAndroid :patches:generatePatchesList -Pversion=${{ env.VERSION }} --no-daemon || \
+            ./gradlew :patches:buildAndroid :patches:generatePatchesList -Pversion=${{ env.VERSION }} --no-daemon
+
+      - name: Prepare Release Assets
+        id: prepare
+        run: |
+          VERSION="${{ env.VERSION }}"
           
           # Find compiled MPP bundle
           MPP_FILE=$(find patches/build/libs -name "*.mpp" ! -name "*sources*" ! -name "*javadoc*" | head -n 1)
@@ -78,6 +85,10 @@ jobs:
              patches-bundle.json > patches-bundle.json.tmp
           mv patches-bundle.json.tmp patches-bundle.json
           
+          # Update patches-list.json
+          jq --arg ver "$VERSION" '.version = $ver' patches-list.json > patches-list.json.tmp
+          mv patches-list.json.tmp patches-list.json
+          
           cp patches-bundle.json dist/
           cp patches-list.json dist/
 
@@ -85,7 +96,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add patches-bundle.json patches-list.json
+          git add patches-bundle.json patches-list.json gradle.properties
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update patches metadata for v${VERSION} [skip ci]" && git push origin HEAD:main)
 
       - name: Create or Update GitHub Release
