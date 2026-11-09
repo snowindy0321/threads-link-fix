@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Fix Instagram integration",
+    "description": "解決當安裝修補版 (Morphe) Instagram 時，Threads 無法開啟 IG 個人檔案以及無法分享貼文至 IG 限時動態的問題。",
+    "version": "1.0.0",
+    "default": true,
+    "compatiblePackages": [
+      {
+        "name": "com.instagram.barcelona"
+      }
+    ]
+  }
+]
