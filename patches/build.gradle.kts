@@ -1,4 +1,5 @@
 group = "app.morphe.patches.threads"
+version = rootProject.version
 
 patches {
     about {
